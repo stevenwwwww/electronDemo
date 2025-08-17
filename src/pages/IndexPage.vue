@@ -176,13 +176,13 @@
               :disable="!hotUpdateAvailable"
               size="sm"
             />
-            <!-- <q-btn
+            <q-btn
               color="warning"
               label="重置版本"
               icon="restore"
               @click="resetToDefault"
               size="sm"
-            /> -->
+            />
           </div>
           <div v-if="hotUpdateStatus" class="q-mt-md">
             <q-banner 
