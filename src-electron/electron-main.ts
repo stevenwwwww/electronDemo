@@ -6,10 +6,12 @@ import * as fs from 'fs-extra';
 import axios from 'axios';
 
 let mainWindow: BrowserWindow | null = null;
+let isQuittingForUpdate = false;
 
 // 配置自动更新
 autoUpdater.autoDownload = false;
-autoUpdater.autoInstallOnAppQuit = true;
+autoUpdater.autoInstallOnAppQuit = false; // 改为false，手动控制重启
+autoUpdater.allowDowngrade = false;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -54,6 +56,25 @@ ipcMain.handle('get-system-info', () => {
         hostname: os.hostname(),
         cpus: os.cpus().length,
         memory: os.totalmem()
+      }
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : '未知错误';
+    return {
+      success: false,
+      error: errorMessage
+    };
+  }
+});
+
+// 添加获取应用版本信息的IPC处理器
+ipcMain.handle('get-app-version', () => {
+  try {
+    return {
+      success: true,
+      data: {
+        version: app.getVersion(),
+        name: app.getName()
       }
     };
   } catch (error) {
@@ -380,7 +401,11 @@ ipcMain.handle('download-update', async () => {
 ipcMain.handle('install-update', () => {
   try {
     console.log('安装更新并重启...');
-    autoUpdater.quitAndInstall(true, true);
+    isQuittingForUpdate = true;
+    // 确保在重启前给前端足够时间显示消息
+    setTimeout(() => {
+      autoUpdater.quitAndInstall(false, true);
+    }, 1000);
     return {
       success: true,
       message: '正在安装更新并重启应用...'
@@ -436,9 +461,36 @@ autoUpdater.on('download-progress', (progressObj) => {
 });
 
 autoUpdater.on('update-downloaded', (info) => {
-  console.log('更新下载完成');
+  console.log('更新下载完成，准备自动安装...');
   if (mainWindow) {
-    mainWindow.webContents.send('update-downloaded', info);
+    mainWindow.webContents.send('update-downloaded', {
+      version: info.version,
+      releaseDate: info.releaseDate,
+      releaseNotes: info.releaseNotes,
+      autoInstall: true // 标记为自动安装
+    });
+    
+    // 在macOS上直接自动安装，不依赖前端调用
+    console.log('自动安装更新并重启...');
+    console.log('当前平台:', process.platform);
+    isQuittingForUpdate = true;
+    
+    // 延迟2秒确保前端收到消息
+    setTimeout(() => {
+      console.log('执行quitAndInstall...');
+      try {
+        // 对于macOS，尝试不同的参数组合
+        if (process.platform === 'darwin') {
+          console.log('macOS平台：使用特殊的重启参数');
+          autoUpdater.quitAndInstall(true, true);
+        } else {
+          autoUpdater.quitAndInstall(false, true);
+        }
+        console.log('quitAndInstall执行完成');
+      } catch (error) {
+        console.error('quitAndInstall执行失败:', error);
+      }
+    }, 2000);
   }
 });
 
@@ -515,5 +567,13 @@ app.on('window-all-closed', () => {
 // 处理应用退出前的清理工作
 app.on('before-quit', () => {
   console.log('应用即将退出，进行清理工作...');
+  
+  // 如果是因为更新而退出，允许退出
+  if (isQuittingForUpdate) {
+    console.log('正在为更新退出应用...');
+    return;
+  }
+  
+  // 其他情况下的清理工作可以在这里进行
 });
 

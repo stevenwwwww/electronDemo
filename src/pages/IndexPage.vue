@@ -31,7 +31,7 @@
       </q-card>
 
       <!-- 文件操作功能 -->
-      <q-card class="col-12 col-md-5">
+      <!-- <q-card class="col-12 col-md-5">
         <q-card-section>
           <div class="text-h6">
             <q-icon name="folder" class="q-mr-sm" />
@@ -55,7 +55,7 @@
             :loading="fileLoading"
           />
         </q-card-section>
-      </q-card>
+      </q-card> -->
 
       <!-- 远程API调用 -->
       <q-card class="col-12 col-md-5">
@@ -147,56 +147,76 @@
         </q-card-section>
       </q-card>
 
-      <!-- 热更新功能 -->
+      <!-- Web内容热更新功能 -->
       <q-card class="col-12 col-md-5">
         <q-card-section>
           <div class="text-h6">
-            <q-icon name="system_update" class="q-mr-sm" />
-            热更新功能
+            <q-icon name="palette" class="q-mr-sm" />
+            Web内容热更新
+            <q-chip :color="hotUpdateTheme?.primaryColor ? 'pink' : 'primary'" text-color="white" size="sm" class="q-ml-sm">
+              v{{ hotUpdateVersion }}
+            </q-chip>
           </div>
         </q-card-section>
         <q-card-section>
           <div class="row q-gutter-sm q-mb-md">
             <q-btn
               color="primary"
-              label="检查更新"
-              icon="update"
-              @click="checkForUpdates"
-              :loading="updateLoading"
+              label="检查热更新"
+              icon="refresh"
+              @click="checkForHotUpdates"
+              :loading="hotUpdateLoading"
               size="sm"
             />
             <q-btn
               color="secondary"
-              label="下载更新"
+              label="应用更新"
               icon="download"
-              @click="downloadUpdate"
-              :disable="!updateAvailable"
+              @click="applyHotUpdate"
+              :disable="!hotUpdateAvailable"
               size="sm"
             />
-            <q-btn
-              color="positive"
-              label="查看版本"
-              icon="info"
-              @click="showVersionInfo"
+            <!-- <q-btn
+              color="warning"
+              label="重置版本"
+              icon="restore"
+              @click="resetToDefault"
               size="sm"
-            />
+            /> -->
           </div>
-          <div v-if="updateStatus" class="q-mt-md">
+          <div v-if="hotUpdateStatus" class="q-mt-md">
             <q-banner 
-              :class="updateStatus.includes('错误') || updateStatus.includes('失败') ? 'bg-red-1' : 
-                     updateStatus.includes('发现新版本') ? 'bg-orange-1' :
-                     updateStatus.includes('完成') || updateStatus.includes('成功') ? 'bg-green-1' : 'bg-blue-1'"
+              :class="hotUpdateStatus.includes('错误') || hotUpdateStatus.includes('失败') ? 'bg-red-1' : 
+                     hotUpdateStatus.includes('发现新版本') || hotUpdateStatus.includes('发现热更新') ? 'bg-orange-1' :
+                     hotUpdateStatus.includes('成功') ? 'bg-green-1' : 'bg-blue-1'"
               dense
               rounded
             >
-              <div style="white-space: pre-line;">{{ updateStatus }}</div>
+              <div style="white-space: pre-line;">{{ hotUpdateStatus }}</div>
             </q-banner>
+          </div>
+          <div v-if="hotUpdateContent?.title" class="q-mt-md">
+            <q-card flat bordered>
+              <q-card-section>
+                <div class="text-subtitle2">{{ hotUpdateContent.title }}</div>
+                <q-list v-if="hotUpdateContent.features?.length" dense>
+                  <q-item v-for="feature in hotUpdateContent.features" :key="feature">
+                    <q-item-section avatar>
+                      <q-icon name="star" color="primary" size="xs" />
+                    </q-item-section>
+                    <q-item-section>{{ feature }}</q-item-section>
+                  </q-item>
+                </q-list>
+              </q-card-section>
+            </q-card>
           </div>
         </q-card-section>
       </q-card>
 
+
+
       <!-- 平台信息 -->
-      <q-card class="col-12">
+      <!-- <q-card class="col-12">
         <q-card-section>
           <div class="text-h6">
             <q-icon name="info" class="q-mr-sm" />
@@ -222,7 +242,7 @@
             </div>
           </div>
         </q-card-section>
-      </q-card>
+      </q-card> -->
     </div>
   </q-page>
 </template>
@@ -233,7 +253,18 @@ import { useQuasar, Platform } from 'quasar';
 import { dbService } from '../services/db-service';
 import { apiService } from '../services/api-service';
 import { printerService } from '../services/printer-service';
-import { updateService } from '../services/update-service';
+
+import { hotUpdateService, type HotUpdateInfo, type ThemeConfig, type ContentConfig } from '../services/hot-update-service';
+
+// 声明全局类型
+declare global {
+  interface Window {
+    electronAPI: {
+      getAppVersion: () => Promise<{ success: boolean; data: { version: string } }>;
+      // 其他electronAPI方法可以在这里声明
+    };
+  }
+}
 
 const $q = useQuasar();
 
@@ -245,20 +276,26 @@ interface DbItem {
 }
 
 // 响应式数据
-const apiData = ref<any>(null);
+const apiData = ref<Record<string, unknown> | null>(null);
 const weatherLoading = ref(false);
 const userLoading = ref(false);
 const dbTestData = ref('');
 const dbResults = ref<DbItem[]>([]);
-const updateLoading = ref(false);
-const updateAvailable = ref(false);
-const updateStatus = ref('');
-const fileLoading = ref(false);
+
+
+// 热更新相关数据
+const hotUpdateLoading = ref(false);
+const hotUpdateAvailable = ref(false);
+const hotUpdateStatus = ref('');
+const hotUpdateVersion = ref('1.0.0');
+const hotUpdateInfo = ref<HotUpdateInfo | null>(null);
+const hotUpdateTheme = ref<ThemeConfig | null>(null);
+const hotUpdateContent = ref<ContentConfig | null>(null);
 
 const platformInfo = ref({
   platform: Platform.is.electron ? 'Windows/Desktop' : Platform.is.cordova ? 'Android/Mobile' : 'Web',
   mode: Platform.is.electron ? 'Electron' : Platform.is.cordova ? 'Cordova' : 'Browser',
-  version: '1.0.0'
+  version: '2.0.0'
 });
 
 // 打印机功能
@@ -398,120 +435,112 @@ const clearDb = async () => {
   }
 };
 
-// 热更新功能
-const checkForUpdates = async () => {
-  updateLoading.value = true;
+// Web内容热更新功能
+const checkForHotUpdates = async () => {
+  hotUpdateLoading.value = true;
   try {
-    const result = await updateService.checkForUpdates();
-    updateAvailable.value = result.available;
-    updateStatus.value = result.message;
+    const result = await hotUpdateService.checkForHotUpdates();
+    hotUpdateAvailable.value = result.available;
     
-    // 如果发现新版本，显示更多详细信息
     if (result.available && result.updateInfo) {
-      updateStatus.value = `发现新版本 ${result.updateInfo.version}！\n当前版本: ${platformInfo.value.version}\n更新内容: ${result.updateInfo.releaseNotes}`;
+      hotUpdateInfo.value = result.updateInfo;
+      hotUpdateStatus.value = `发现热更新 v${result.updateInfo.version}！\n${result.updateInfo.description}`;
+    } else {
+      hotUpdateStatus.value = '已经是最新版本，无需更新';
+      $q.notify({
+        type: 'info',
+        message: '已经是最新版本，无需更新'
+      });
     }
   } catch (error) {
-    updateStatus.value = '检查更新失败: ' + (error instanceof Error ? error.message : '未知错误');
+    hotUpdateStatus.value = '检查热更新失败: 已经是最新版本 ';
+    // $q.notify({
+    //   type: 'negative',
+    //   message: '检查热更新失败'
+    // });
   } finally {
-    updateLoading.value = false;
+    hotUpdateLoading.value = false;
   }
 };
 
-const downloadUpdate = async () => {
+const applyHotUpdate = async () => {
+  if (!hotUpdateInfo.value) return;
+  
   try {
-    updateStatus.value = '正在下载更新...';
-    const result = await updateService.downloadUpdate();
-    updateStatus.value = result.message;
+    hotUpdateStatus.value = '正在应用热更新...';
+    const result = await hotUpdateService.applyHotUpdate(hotUpdateInfo.value);
     
-    // 如果下载成功，自动安装并重启
-    if (result.available) {
-      updateStatus.value = '下载完成，准备安装更新...';
-      
-      // 延迟2秒后自动安装
-      setTimeout(() => {
-        updateService.installUpdateAndRestart().then(() => {
-          updateStatus.value = '应用正在重启...';
-        }).catch((error: Error) => {
-          updateStatus.value = '自动重启失败，请手动重启应用以完成更新';
-          console.error('自动重启失败:', error);
-        });
-      }, 2000);
+    if (result.success) {
+      hotUpdateStatus.value = result.message;
+      // 更新本地状态
+      hotUpdateVersion.value = result.newVersion || hotUpdateVersion.value;
+      hotUpdateAvailable.value = false;
+    } else {
+      hotUpdateStatus.value = result.message;
     }
   } catch (error) {
-    updateStatus.value = '下载更新失败: ' + (error instanceof Error ? error.message : '未知错误');
+    hotUpdateStatus.value = '应用热更新失败: ' + (error instanceof Error ? error.message : '未知错误');
   }
 };
 
-const showVersionInfo = () => {
-  $q.dialog({
-    title: '当前版本信息',
-    message: `平台: ${platformInfo.value.platform}\n运行环境: ${platformInfo.value.mode}\n版本: ${platformInfo.value.version}`,
-    persistent: true,
-    ok: true,
-    cancel: false,
-    color: 'primary'
-  }).onOk(() => {
-    // 用户点击确定后的操作
-    console.log('版本信息对话框已关闭');
-  });
-};
-
-// 文件操作功能
-const testFileWrite = async () => {
-  fileLoading.value = true;
+const resetToDefault = async () => {
   try {
-    const testData = {
-      timestamp: new Date().toISOString(),
-      platform: platformInfo.value.platform,
-      message: 'Hello from Electron Quasar Demo!'
-    };
-    
-    const result = await window.electronAPI.writeFile('test-data.json', JSON.stringify(testData, null, 2));
-    
-    $q.notify({
-      type: 'positive',
-      message: `文件写入成功: ${result.path}`
-    });
+    hotUpdateStatus.value = '正在重置主题...';
+    await hotUpdateService.resetToDefault();
+    hotUpdateStatus.value = '已重置到默认主题';
+    hotUpdateVersion.value = '1.0.0';
+    hotUpdateAvailable.value = false;
+    hotUpdateTheme.value = null;
+    hotUpdateContent.value = null;
   } catch (error) {
-    $q.notify({
-      type: 'negative',
-      message: '文件写入失败: ' + (error instanceof Error ? error.message : '未知错误')
-    });
-  } finally {
-    fileLoading.value = false;
+    hotUpdateStatus.value = '重置失败: ' + (error instanceof Error ? error.message : '未知错误');
   }
 };
 
-const testFileRead = async () => {
-  fileLoading.value = true;
-  try {
-    const result = await window.electronAPI.readFile('test-data.json');
-    
-    $q.dialog({
-      title: '文件内容',
-      message: `文件路径: ${result.path}\n\n文件内容:\n${result.content}`,
-      ok: '确定',
-      cancel: false
-    });
-    
-    $q.notify({
-      type: 'positive',
-      message: '文件读取成功'
-    });
-  } catch (error) {
-    $q.notify({
-      type: 'negative',
-      message: '文件读取失败: ' + (error instanceof Error ? error.message : '未知错误')
-    });
-  } finally {
-    fileLoading.value = false;
-  }
-};
+
 
 // 组件挂载
 onMounted(async () => {
   await queryFromDb();
+  await loadVersionInfo();
+  loadHotUpdateInfo();
 });
+
+// 获取版本信息
+const loadVersionInfo = async () => {
+  try {
+    if (Platform.is.electron && window.electronAPI) {
+      const result = await window.electronAPI.getAppVersion();
+      if (result.success) {
+        platformInfo.value.version = result.data.version;
+      }
+    }
+  } catch (error) {
+    console.error('获取版本信息失败:', error);
+  }
+};
+
+// 加载热更新信息
+const loadHotUpdateInfo = () => {
+  try {
+    // 获取当前热更新版本
+    hotUpdateVersion.value = hotUpdateService.getCurrentVersion();
+    
+    // 获取当前主题配置
+    hotUpdateTheme.value = hotUpdateService.getCurrentTheme();
+    
+    // 获取当前内容配置
+    hotUpdateContent.value = hotUpdateService.getCurrentContent();
+    
+    // 如果有主题配置，应用到页面
+    if (hotUpdateTheme.value) {
+      document.documentElement.style.setProperty('--q-primary', hotUpdateTheme.value.primaryColor);
+      document.documentElement.style.setProperty('--q-secondary', hotUpdateTheme.value.secondaryColor);
+    }
+  } catch (error) {
+    console.error('加载热更新信息失败:', error);
+  }
+};
 </script>
 
 <style scoped>

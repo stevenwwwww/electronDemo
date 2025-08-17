@@ -1,6 +1,6 @@
 {
   "name": "quasar-project",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "description": "A Quasar Project",
   "productName": "Electron Quasar Demo",
   "author": "stevenli <your-email@domain.com>",

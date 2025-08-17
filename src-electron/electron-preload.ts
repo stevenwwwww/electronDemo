@@ -15,6 +15,9 @@ interface ElectronAPI {
   // 系统信息
   getSystemInfo: () => Promise<any>;
   
+  // 应用版本信息
+  getAppVersion: () => Promise<any>;
+  
   // API调用
   apiCall: (params: { url: string; method?: string; data?: any }) => Promise<any>;
   
@@ -37,7 +40,7 @@ interface ElectronAPI {
   onUpdateNotAvailable: (callback: () => void) => void;
   onUpdateError: (callback: (error: string) => void) => void;
   onUpdateDownloadProgress: (callback: (progress: any) => void) => void;
-  onUpdateDownloaded: (callback: () => void) => void;
+  onUpdateDownloaded: (callback: (info: any) => void) => void;
   
   // 移除事件监听器
   removeAllListeners: (channel: string) => void;
@@ -51,6 +54,9 @@ interface ElectronAPI {
 contextBridge.exposeInMainWorld('electronAPI', {
   // 系统信息
   getSystemInfo: () => ipcRenderer.invoke('get-system-info'),
+  
+  // 应用版本信息
+  getAppVersion: () => ipcRenderer.invoke('get-app-version'),
   
   // API调用
   apiCall: (params: { url: string; method?: string; data?: any }) => 
@@ -87,8 +93,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onUpdateDownloadProgress: (callback: (progress: any) => void) => {
     ipcRenderer.on('update-download-progress', (_event, progress) => callback(progress));
   },
-  onUpdateDownloaded: (callback: () => void) => {
-    ipcRenderer.on('update-downloaded', callback);
+  onUpdateDownloaded: (callback: (info: any) => void) => {
+    ipcRenderer.on('update-downloaded', (_event, info) => callback(info));
   },
   
   // 移除事件监听器

@@ -23,6 +23,22 @@ class UpdateService {
   constructor() {
     console.log('UpdateService initialized, Platform:', this.isElectron ? 'Electron' : 'Web');
     this.setupElectronListeners();
+    void this.initializeVersion();
+  }
+
+  // 初始化版本信息
+  private async initializeVersion(): Promise<void> {
+    if (this.isElectron && window.electronAPI) {
+      try {
+        const result = await window.electronAPI.getAppVersion();
+        if (result.success) {
+          this.currentVersion = result.data.version;
+          console.log('当前应用版本:', this.currentVersion);
+        }
+      } catch (error) {
+        console.error('获取应用版本失败:', error);
+      }
+    }
   }
 
   // 设置Electron更新事件监听器
@@ -49,8 +65,10 @@ class UpdateService {
         console.log('Electron: 下载进度:', progress);
       });
 
-      window.electronAPI.onUpdateDownloaded(() => {
-        console.log('Electron: 更新下载完成');
+      window.electronAPI.onUpdateDownloaded((info) => {
+        console.log('Electron: 更新下载完成，应用将自动重启...', info);
+        // 不再在前端调用安装，主进程会自动处理
+        console.log('等待应用自动重启...');
       });
     }
   }
@@ -59,6 +77,9 @@ class UpdateService {
   async checkForUpdates(): Promise<UpdateResult> {
     try {
       console.log('正在检查更新...');
+      
+      // 确保版本信息是最新的
+      await this.initializeVersion();
       
       if (!this.isElectron) {
         return {
@@ -130,7 +151,7 @@ class UpdateService {
         downloadUrl: data.zipball_url || 'https://example.com/update.zip',
         size: 1024 * 1024 * 10 // 10MB
       };
-    } catch (error) {
+    } catch {
       // 如果API调用失败，返回模拟数据
       console.warn('无法连接到更新服务器，使用模拟数据');
       return {
@@ -276,12 +297,14 @@ class UpdateService {
       try {
         console.log('清理更新缓存...');
         // 注意：这个功能需要在preload中实现
+        await Promise.resolve(); // 占位符，防止linter错误
         console.log('更新缓存清理完成');
-      } catch (error) {
-        console.error('清理更新缓存失败:', error);
+      } catch {
+        console.error('清理更新缓存失败');
       }
     } else {
       console.log('模拟清理更新缓存');
+      await Promise.resolve(); // 占位符，防止linter错误
     }
   }
 

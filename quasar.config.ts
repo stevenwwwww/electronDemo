@@ -242,6 +242,13 @@ export default defineConfig((/* ctx */) => {
         appId: 'com.electron.quasar.demo',
         productName: 'Electron Quasar Demo',
         
+        // 自动更新配置
+        publish: {
+          provider: 'github',
+          owner: 'your-github-username',
+          repo: 'your-repo-name'
+        },
+        
         // 确保包含所有必要的文件
         files: [
           '**/*',
